@@ -1,21 +1,21 @@
-# MiTool Terminal (APK)
+# A Flasher
 
-কোনো ওয়েবসাইট/Termux/PC ছাড়াই, অ্যাপের ভেতর থেকেই OTG কেবল দিয়ে অন্য যেকোনো অ্যান্ড্রয়েড ফোনে adb ও fastboot কমান্ড চালানোর টার্মিনাল।
+Run adb and fastboot commands on another Android phone straight from your phone over an OTG cable. No PC, no Termux.
 
-## APK বানানোর নিয়ম (GitHub দিয়ে, কম্পিউটার লাগবে না)
-1. এই ফোল্ডারের সব ফাইল একটা নতুন GitHub রিপোতে আপলোড করুন (`.github` ফোল্ডারসহ)।
-2. রিপোর **Actions** ট্যাবে "Build APK" নিজে থেকেই চলবে (না চললে Run workflow চাপুন)।
-3. শেষ হলে ওই রানের নিচে **Artifacts → MiTermi-APK** থেকে APK নামান ও ইনস্টল করুন।
+## Build the APK (no computer needed)
+1. Upload every file of this folder (including the `.github` folder) to a new GitHub repository.
+2. Open the repository's **Actions** tab. "Build APK" runs automatically (or press **Run workflow**).
+3. When it finishes, open the run and download **A-Flasher-APK** under Artifacts.
 
-Android Studio থাকলে ফোল্ডারটা খুলে Build → Build APK ও করা যায়।
+You can also open the folder in Android Studio and choose Build > Build APK(s).
 
-## ব্যবহার
-- টার্গেট ফোন OTG কেবল দিয়ে এই ফোনে লাগান। adb-এর জন্য টার্গেটে USB debugging চালু রাখুন, fastboot-এর জন্য বুটলোডার মোডে নিন।
-- `fastboot flash boot ` লিখে 📎 চাপুন, ফাইল বাছুন (নাম নিজে বসে যাবে), তারপর ▶ চাপুন।
-- ফাইল আগে অ্যাটাচ করা থাকলে `fastboot flash boot` লিখলেই শেষের অ্যাটাচ করা ফাইল ব্যবহার হবে। নামের জায়গায় `@` ও লেখা যায়।
-- `help` লিখলে সব কমান্ডের তালিকা আসবে।
+## Use
+- Plug the OTG adapter into this phone and connect the cable to the target phone. The app checks the connection every 2 seconds and tells you what is missing (OTG, USB debugging, authorization).
+- Commands tab: tap the play button to run a command, tap the text to edit it in the terminal first.
+- Attach a file with the paperclip, then run any command marked "needs file".
+- Terminal tab: type any command. Type `help` for the full list.
 
-## সীমাবদ্ধতা
-- ফাস্টবুটে max-download-size-এর চেয়ে বড় ইমেজ (স্পার্স ছাড়া) ফ্ল্যাশ হবে না।
-- Samsung Odin, Qualcomm EDL, MTK মোড সমর্থিত নয়; শুধু adb ও fastboot প্রোটোকল।
-- এই ফোনের নিজের বুটলোডার/সিস্টেমে কাজ করে না, শুধু OTG দিয়ে লাগানো অন্য ফোনে।
+## Limits
+- Only the adb and fastboot protocols (no Samsung Odin, Qualcomm EDL or MTK modes).
+- Images larger than the bootloader's max-download-size must be sparse images.
+- It controls another phone over OTG, not the phone it is installed on.

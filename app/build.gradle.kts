@@ -3,10 +3,10 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 android {
-    namespace = "com.mitool.terminal"
+    namespace = "com.aflasher.app"
     compileSdk = 34
     defaultConfig {
-        applicationId = "com.mitool.terminal"
+        applicationId = "com.aflasher.app"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
