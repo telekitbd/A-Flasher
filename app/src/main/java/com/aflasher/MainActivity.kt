@@ -443,27 +443,15 @@ class MainActivity : Activity() {
 
 
     // ---------------- credits ----------------
-    // Labels and URLs are kept XOR + Base64 obfuscated below instead of as
-    // plain string literals, so a decompiled APK doesn't show them in the
-    // clear. This raises the bar against a casual search-and-replace edit;
-    // it is not unbreakable against someone who reads the decode logic.
-    private fun deobf(s: String): String {
-        val key = "A-Flasher-2026"
-        val raw = android.util.Base64.decode(s, android.util.Base64.NO_WRAP)
-        val out = CharArray(raw.size)
-        for (i in raw.indices) out[i] = ((raw[i].toInt() and 0xFF) xor key[i % key.length].code).toChar()
-        return String(out)
-    }
-
     private fun showCredits() {
         val links = listOf(
-            "B0wlCQMcBw5SakBfR0Y=" to "KVkyHBJJR0oUTFFVUFkuRmgPDh5HFhpMQFUdUW4cDA4zIg82B3dIHw==",
-            "DEg1HwQdDwAADXVCXUMxDW4hICtB" to "KVkyHBJJR0ofA19VHVxubCQNBRxFAD98eGRlcRhOEA==",
-            "FUgqCQYBCQhSakBfR0Y=" to "KVkyHBJJR0oGA19VHR0seHA8OSNfDSp/C1h8BAwc",
-            "EV8pAwdTR0UkSEBZVF8iTDIFDh0=" to "KVkyHBJJR0oGA19VHVggVCMBExwHEQ==",
-            "GEIzOBQRDUUxRVNeXFMt" to "KVkyHBJJR0oLQkdER1QkAyUDDFwoBxdDVVxXRCBdMgMT",
-            "FUQtOA4Y" to "KVkyHBJJR0oGRFlEXV1vTikBTjMGBBtAUFlcXiBfMwI="
-        ).map { (l, u) -> deobf(l) to deobf(u) }
+            "Facebook Group" to "https://facebook.com/share/g/1JbRQgSuZz/",
+            "Messenger Group (MAX)" to "https://m.me/j/Abado-eMQJTWGYcV",
+            "Telegram Group" to "https://t.me/+mU6PXP7hXR9hN2M1",
+            "Proof / Verification" to "https://t.me/nayemroot",
+            "YouTube Channel" to "https://youtube.com/@bengleraptor",
+            "TikTok" to "https://tiktok.com/@naimbinharun"
+        )
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(16), dp(18), dp(8)) }
         col.addView(TextView(this).apply { text = "Credits"; setTextColor(orange); textSize = 20f; typeface = Typeface.DEFAULT_BOLD })
         col.addView(TextView(this).apply {
