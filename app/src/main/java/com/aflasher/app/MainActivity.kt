@@ -476,12 +476,14 @@ class MainActivity : Activity() {
             text = "Thank you for staying with us. Your support and cooperation mean a lot to us."
             setTextColor(grey); textSize = 12.5f; setPadding(0, dp(14), 0, dp(4))
         })
-        val sv = ScrollView(this).apply { setBackgroundColor(bg); addView(col) }
+        val sv = ScrollView(this).apply { background = box(bg, line, 18); addView(col) }
         val dlg = AlertDialog.Builder(this)
             .setView(sv)
             .setPositiveButton("Close", null)
             .create()
+        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         dlg.show()
+        dlg.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(orange)
     }
 
     private fun addSection(list: LinearLayout, title: String, cmds: List<Cmd>) {
