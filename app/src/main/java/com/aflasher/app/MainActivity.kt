@@ -267,7 +267,7 @@ class MainActivity : Activity() {
             text = "Stop"; textSize = 13f; gravity = Gravity.CENTER; typeface = Typeface.DEFAULT_BOLD
             includeFontPadding = false
             setPadding(dp(18), 0, dp(18), 0)
-            setOnClickListener { onStop() }
+            setOnClickListener { stopFlash() }
         }
         setRunning(false)
         header.addView(titleCol, LinearLayout.LayoutParams(0, -2, 1f))
@@ -530,7 +530,7 @@ class MainActivity : Activity() {
         stopBtn.setTextColor(if (on) Color.WHITE else grey)
     }
 
-    private fun onStop() {
+    private fun stopFlash() {
         if (busy.get()) {
             router.stop()
             log.ln("Stopping...", L_E)
