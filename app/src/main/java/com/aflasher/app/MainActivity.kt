@@ -65,6 +65,7 @@ class MainActivity : Activity() {
     private lateinit var connDetail: TextView
     private lateinit var connBtn: TextView
     private lateinit var stopBtn: TextView
+    private lateinit var creditFab: IconButton
     private var pendingRun: String? = null
 
     private val exec = Executors.newSingleThreadExecutor()
@@ -330,6 +331,16 @@ class MainActivity : Activity() {
 
         list.addView(attachRow(), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
 
+        addSection(list, "FASTBOOT", listOf(
+            Cmd("fastboot reboot bootloader", "Reboot to bootloader"),
+            Cmd("fastboot reboot fastboot", "Reboot to fastbootd"),
+            Cmd("fastboot getvar all", "Show bootloader variables"),
+            Cmd("fastboot oem device-info", "Show bootloader device info"),
+            Cmd("fastboot reboot", "Reboot device"),
+            Cmd("fastboot reboot recovery", "Reboot to recovery"),
+            Cmd("fastboot reboot edl", "Reboot to EDL mode")
+        ))
+
         addSection(list, "FLASH & INSTALL", listOf(
             Cmd("fastboot flash boot", "Flash boot image", needsFile = true),
             Cmd("fastboot flash init_boot", "Flash init_boot image", needsFile = true),
@@ -420,9 +431,57 @@ class MainActivity : Activity() {
         termPage.addView(row, LinearLayout.LayoutParams(-1, -2))
         frame.addView(termPage, FrameLayout.LayoutParams(-1, -1))
 
+        creditFab = IconButton(this, IconButton.INFO, orange).apply { setOnClickListener { showCredits() } }
+        frame.addView(creditFab, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.END or Gravity.BOTTOM).apply {
+            rightMargin = dp(8); bottomMargin = dp(16)
+        })
+
         root.addView(frame, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
         showTab(false)
+    }
+
+
+    // ---------------- credits ----------------
+    private fun showCredits() {
+        val links = listOf(
+            "Facebook Group" to "https://facebook.com/share/g/1JbRQgSuZz/",
+            "Messenger Group (MAX)" to "https://m.me/j/Abado-eMQJTWGYcV",
+            "Telegram Group" to "https://t.me/+mU6PXP7hXR9hN2M1",
+            "Proof / Verification" to "https://t.me/nayemroot",
+            "YouTube Channel" to "https://youtube.com/@bengleraptor",
+            "TikTok" to "https://tiktok.com/@naimbinharun"
+        )
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(16), dp(18), dp(8)) }
+        col.addView(TextView(this).apply { text = "Credits"; setTextColor(orange); textSize = 20f; typeface = Typeface.DEFAULT_BOLD })
+        col.addView(TextView(this).apply {
+            text = "Stay connected with us and get new updates by joining the social media and community groups below."
+            setTextColor(Color.parseColor("#C9D1D9")); textSize = 13.5f; setPadding(0, dp(8), 0, dp(8))
+        })
+        for ((label, url) in links) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = box(card, line, 12)
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                setOnClickListener {
+                    try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                    catch (e: Exception) { Toast.makeText(this@MainActivity, "Cannot open link", Toast.LENGTH_SHORT).show() }
+                }
+            }
+            row.addView(TextView(this).apply { text = label; setTextColor(Color.WHITE); textSize = 14.5f; typeface = Typeface.DEFAULT_BOLD })
+            row.addView(TextView(this).apply { text = url; setTextColor(Color.parseColor("#79C0FF")); textSize = 12f; typeface = Typeface.MONOSPACE })
+            col.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        }
+        col.addView(TextView(this).apply {
+            text = "Thank you for staying with us. Your support and cooperation mean a lot to us."
+            setTextColor(grey); textSize = 12.5f; setPadding(0, dp(14), 0, dp(4))
+        })
+        val sv = ScrollView(this).apply { setBackgroundColor(bg); addView(col) }
+        val dlg = AlertDialog.Builder(this)
+            .setView(sv)
+            .setPositiveButton("Close", null)
+            .create()
+        dlg.show()
     }
 
     private fun addSection(list: LinearLayout, title: String, cmds: List<Cmd>) {
@@ -438,6 +497,7 @@ class MainActivity : Activity() {
     private fun showTab(terminal: Boolean) {
         cmdPage.visibility = if (terminal) View.GONE else View.VISIBLE
         termPage.visibility = if (terminal) View.VISIBLE else View.GONE
+        creditFab.visibility = if (terminal) View.GONE else View.VISIBLE
         tabCmd.background = if (terminal) null else box(orange, orange, 10)
         tabTerm.background = if (terminal) box(orange, orange, 10) else null
         tabCmd.setTextColor(if (terminal) grey else Color.WHITE)

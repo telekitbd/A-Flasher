@@ -61,7 +61,7 @@ class Router(
             "  adb uninstall <package>\n" +
             "  fastboot devices\n" +
             "  fastboot getvar <name|all>\n" +
-            "  fastboot reboot [bootloader|recovery|fastboot]\n" +
+            "  fastboot reboot [bootloader|recovery|fastboot|edl]\n" +
             "  fastboot flash <partition> <file>\n" +
             "  fastboot --disable-verity --disable-verification flash vbmeta <file>\n" +
             "  (options work before or after the word flash)\n" +
@@ -226,8 +226,13 @@ class Router(
             }
             "reboot" -> {
                 val m = a.getOrNull(1)
-                f.cmd(if (m == null) "reboot" else "reboot-$m")
-                log.ln("Rebooting...", L_OK)
+                if (m == "edl") {
+                    f.cmd("oem edl")
+                    log.ln("Rebooting to EDL...", L_OK)
+                } else {
+                    f.cmd(if (m == null) "reboot" else "reboot-$m")
+                    log.ln("Rebooting...", L_OK)
+                }
             }
             "reboot-bootloader" -> { f.cmd("reboot-bootloader"); log.ln("Rebooting to bootloader...", L_OK) }
             "continue" -> { f.cmd("continue"); log.ln("OKAY", L_OK) }

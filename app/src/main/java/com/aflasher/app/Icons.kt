@@ -7,11 +7,12 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.view.View
 
-/** Round button with a drawn (font independent) play or edit icon, perfectly centered. */
+/** Round button with a drawn (font independent) play, edit or info icon, perfectly centered. */
 class IconButton(ctx: Context, private val kind: Int, private val fill: Int) : View(ctx) {
     companion object {
         const val PLAY = 0
         const val EDIT = 1
+        const val INFO = 2
     }
 
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -33,6 +34,12 @@ class IconButton(ctx: Context, private val kind: Int, private val fill: Int) : V
             path.lineTo(cx + 0.20f * s, cy)
             path.close()
             c.drawPath(path, p)
+        } else if (kind == INFO) {
+            c.drawCircle(cx, cy - 0.20f * s, 0.055f * s, p)
+            p.style = Paint.Style.STROKE
+            p.strokeCap = Paint.Cap.ROUND
+            p.strokeWidth = 0.09f * s
+            c.drawLine(cx, cy - 0.06f * s, cx, cy + 0.22f * s, p)
         } else {
             p.style = Paint.Style.STROKE
             p.strokeCap = Paint.Cap.ROUND
