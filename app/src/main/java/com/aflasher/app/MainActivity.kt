@@ -64,6 +64,7 @@ class MainActivity : Activity() {
     private lateinit var connTitle: TextView
     private lateinit var connDetail: TextView
     private lateinit var connBtn: TextView
+    private lateinit var stopBtn: TextView
     private var pendingRun: String? = null
 
     private val exec = Executors.newSingleThreadExecutor()
@@ -135,8 +136,7 @@ class MainActivity : Activity() {
         "   - Oppo / Realme / Vivo / Infinix / Tecno: Settings > Additional settings (or Connection & sharing) > OTG\n" +
         "   - Samsung / Pixel / Motorola: automatic, nothing to turn on\n" +
         "2. Plug the OTG adapter into this phone, then connect the cable to the target phone.\n" +
-        "3. On the target phone: Developer options > USB debugging, and set USB mode to File transfer.\n\n" +
-        "Checking automatically every 2 seconds..."
+        "3. On the target phone: Developer options > USB debugging, and set USB mode to File transfer."
 
     private fun startMonitor() {
         if (monitoring) return
@@ -220,13 +220,13 @@ class MainActivity : Activity() {
         }
         return ConnState(
             orange, "Device detected, ADB not available",
-            "On the target phone enable Developer options > USB debugging and set USB mode to File transfer, or boot it into fastboot mode.\n\nChecking automatically every 2 seconds...",
+            "On the target phone enable Developer options > USB debugging and set USB mode to File transfer, or boot it into fastboot mode.",
             false
         )
     }
 
     private val authHelp =
-        "On the target phone tap 'Allow' on the 'Allow USB debugging?' dialog (tick 'Always allow').\n\nChecking automatically..."
+        "On the target phone tap 'Allow' on the 'Allow USB debugging?' dialog (tick 'Always allow')."
 
     private fun showConn(s: ConnState) {
         connCard.background = box(card, s.color, 14)
@@ -263,9 +263,15 @@ class MainActivity : Activity() {
         status = TextView(this).apply { text = "● Checking..."; textSize = 12f; setTextColor(grey); typeface = Typeface.MONOSPACE }
         titleCol.addView(titleRow)
         titleCol.addView(status)
-        val stop = pill("■ Stop", red) { router.stop() }
+        stopBtn = TextView(this).apply {
+            text = "Stop"; textSize = 13f; gravity = Gravity.CENTER; typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+            setPadding(dp(18), 0, dp(18), 0)
+            setOnClickListener { onStop() }
+        }
+        setRunning(false)
         header.addView(titleCol, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(stop, LinearLayout.LayoutParams(-2, dp(34)))
+        header.addView(stopBtn, LinearLayout.LayoutParams(-2, dp(36)))
         root.addView(header, LinearLayout.LayoutParams(-1, -2))
 
         // tabs
@@ -405,9 +411,7 @@ class MainActivity : Activity() {
             setSingleLine(true)
             setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_SEND) { submit(); true } else false }
         }
-        val go = TextView(this).apply {
-            text = "▶"; textSize = 18f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
-            background = box(orange, orange, 22)
+        val go = IconButton(this, IconButton.PLAY, orange).apply {
             setOnClickListener { submit() }
         }
         row.addView(clip, LinearLayout.LayoutParams(dp(44), dp(44)))
@@ -478,9 +482,7 @@ class MainActivity : Activity() {
         col.addView(TextView(this).apply { text = c.cmd; setTextColor(Color.WHITE); textSize = 13.5f; typeface = Typeface.MONOSPACE })
         val tag = if (c.needsFile) "  ·  needs file" else if (c.needsArgs) "  ·  needs arguments" else ""
         col.addView(TextView(this).apply { text = c.desc + tag; setTextColor(grey); textSize = 12f; setPadding(0, dp(2), 0, 0) })
-        val play = TextView(this).apply {
-            text = if (c.needsArgs) "✎" else "▶"; textSize = 16f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
-            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(accent) }
+        val play = IconButton(this, if (c.needsArgs) IconButton.EDIT else IconButton.PLAY, accent).apply {
             setOnClickListener { runFromList(c) }
         }
         r.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
@@ -521,6 +523,20 @@ class MainActivity : Activity() {
         background = box(card, line, 16)
         setPadding(dp(12), dp(7), dp(12), dp(7))
         setOnClickListener { click() }
+    }
+
+    private fun setRunning(on: Boolean) {
+        stopBtn.background = if (on) box(red, red, 18) else box(card, line, 18)
+        stopBtn.setTextColor(if (on) Color.WHITE else grey)
+    }
+
+    private fun onStop() {
+        if (busy.get()) {
+            router.stop()
+            log.ln("Stopping...", L_E)
+        } else {
+            Toast.makeText(this, "Nothing is running", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun copyLog() {
@@ -569,13 +585,17 @@ class MainActivity : Activity() {
             return
         }
         log.ln("$ $l", L_CMD)
+        setRunning(true)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         exec.execute {
             try {
                 router.run(l)
             } finally {
                 busy.set(false)
-                runOnUiThread { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+                runOnUiThread {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    setRunning(false)
+                }
             }
         }
     }

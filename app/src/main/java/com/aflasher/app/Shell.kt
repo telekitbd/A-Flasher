@@ -14,7 +14,9 @@ class Router(
     val lock = java.util.concurrent.locks.ReentrantLock()
     @Volatile var monLink: UsbLink? = null
 
-    fun stop() { link?.close() }
+    @Volatile private var stopped = false
+
+    fun stop() { stopped = true; link?.close() }
 
     fun abortMonitor() { monLink?.close() }
 
@@ -23,6 +25,7 @@ class Router(
         if (t.isEmpty()) return
         abortMonitor()
         lock.lock()
+        stopped = false
         try {
             when (t[0]) {
                 "help", "?" -> help()
@@ -35,7 +38,7 @@ class Router(
                 else -> log.ln("Unknown command '${t[0]}'. Type help", L_E)
             }
         } catch (e: Exception) {
-            log.ln("error: ${e.message}", L_E)
+            if (stopped) log.ln("Stopped.", L_E) else log.ln("error: ${e.message}", L_E)
         } finally {
             link?.close()
             link = null
@@ -60,7 +63,8 @@ class Router(
             "  fastboot getvar <name|all>\n" +
             "  fastboot reboot [bootloader|recovery|fastboot]\n" +
             "  fastboot flash <partition> <file>\n" +
-            "  fastboot flash vbmeta --disable-verity --disable-verification <file>\n" +
+            "  fastboot --disable-verity --disable-verification flash vbmeta <file>\n" +
+            "  (options work before or after the word flash)\n" +
             "  fastboot boot <file>\n" +
             "  fastboot erase <partition>\n" +
             "  fastboot flashing unlock|lock\n" +
@@ -143,6 +147,7 @@ class Router(
         val t = pick(targets, serial, "adb")
         val l = hub.open(t) ?: throw IOException("Cannot open the USB device (permission denied?)")
         link = l
+        if (stopped) throw IOException("Stopped")
         val ad = Adb(l, File(ctx.filesDir, "adbkey.pk8"), log)
         log.ln("Connecting...", L_I)
         if (!ad.connect()) throw IOException("adb connection refused (unauthorized)")
@@ -195,6 +200,8 @@ class Router(
         var a = args0
         var serial: String? = null
         if (a.size >= 2 && a[0] == "-s") { serial = a[1]; a = a.drop(2) }
+        val gopts = a.filter { it.startsWith("--") }
+        a = a.filter { !it.startsWith("--") }
         if (a.isEmpty()) { help(); return }
         val targets = hub.scan().filter { it.kind == Kind.FASTBOOT }
 
@@ -207,6 +214,7 @@ class Router(
         val t = pick(targets, serial, "fastboot")
         val l = hub.open(t) ?: throw IOException("Cannot open the USB device (permission denied?)")
         link = l
+        if (stopped) throw IOException("Stopped")
         val f = Fastboot(l, log)
 
         when (a[0]) {
@@ -225,8 +233,8 @@ class Router(
             "continue" -> { f.cmd("continue"); log.ln("OKAY", L_OK) }
             "flash" -> {
                 val rest = a.drop(1)
-                val opts = rest.filter { it.startsWith("--") }
-                val pos = rest.filter { !it.startsWith("--") }
+                val opts = gopts
+                val pos = rest
                 val part = pos.getOrNull(0) ?: throw IOException("usage: fastboot flash <partition> <file>")
                 var file = fileArg(pos.getOrNull(1))
                 if (opts.isNotEmpty() && part.startsWith("vbmeta")) file = patchVbmeta(file, opts)
