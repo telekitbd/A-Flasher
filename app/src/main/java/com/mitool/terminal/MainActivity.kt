@@ -23,7 +23,6 @@ import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -99,6 +98,14 @@ class MainActivity : Activity() {
     }
 
     // ---------------- UI ----------------
+    private class Cmd(val cmd: String, val desc: String, val needsFile: Boolean = false)
+
+    private lateinit var cmdPage: ScrollView
+    private lateinit var termPage: LinearLayout
+    private lateinit var tabCmd: TextView
+    private lateinit var tabTerm: TextView
+    private var pendingRun: String? = null
+
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -112,38 +119,30 @@ class MainActivity : Activity() {
             text = "▌Mi"; setTextColor(Color.WHITE); textSize = 20f; typeface = Typeface.DEFAULT_BOLD
         }
         val title2 = TextView(this).apply {
-            text = "Tool Terminal"; setTextColor(orange); textSize = 20f; typeface = Typeface.DEFAULT_BOLD
+            text = "Tool"; setTextColor(orange); textSize = 20f; typeface = Typeface.DEFAULT_BOLD
         }
-        val spacer = View(this)
         status = TextView(this).apply { textSize = 12f; setTextColor(grey); typeface = Typeface.MONOSPACE }
         val stop = pill("■ Stop", Color.parseColor("#FF7B72")) { router.stop() }
         header.addView(title)
         header.addView(title2)
-        header.addView(spacer, LinearLayout.LayoutParams(0, 1, 1f))
+        header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         header.addView(status)
         header.addView(stop, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) })
         root.addView(header, LinearLayout.LayoutParams(-1, -2))
 
-        // quick chips
-        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val items = listOf(
-            "adb devices" to true, "fastboot devices" to true, "fastboot getvar all" to true,
-            "adb reboot" to false, "adb reboot bootloader" to false, "adb reboot recovery" to false,
-            "fastboot reboot" to false, "fastboot reboot bootloader" to false,
-            "fastboot flash boot " to false, "fastboot flash recovery " to false,
-            "adb push " to false, "adb install " to false, "adb sideload " to false,
-            "help" to true, "clear" to true
-        )
-        for ((cmd, runNow) in items) {
-            val c = pill(cmd.trim(), Color.parseColor("#C9D1D9")) {
-                if (runNow) runLine(cmd.trim()) else { input.setText(cmd); input.setSelection(input.text.length); input.requestFocus() }
-            }
-            chips.addView(c, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(6) })
+        // tabs
+        val tabs = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = box(card, line, 14)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
         }
-        val chipScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) }
-        root.addView(chipScroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        tabCmd = tabView("☰  Commands") { showTab(false) }
+        tabTerm = tabView(">_  Terminal") { showTab(true) }
+        tabs.addView(tabCmd, LinearLayout.LayoutParams(0, dp(40), 1f))
+        tabs.addView(tabTerm, LinearLayout.LayoutParams(0, dp(40), 1f))
+        root.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
-        // attached file bar
+        // attached file bar (shared by both tabs)
         attachBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -160,16 +159,55 @@ class MainActivity : Activity() {
         attachBar.addView(x)
         root.addView(attachBar, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
 
-        // terminal
+        val frame = android.widget.FrameLayout(this)
+
+        // ---------- commands page ----------
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(12)) }
+        list.addView(attachRow(), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+
+        list.addView(sectionTitle("ADB  ·  ফোন চালু অবস্থায়"))
+        val adbCmds = listOf(
+            Cmd("adb devices", "সংযুক্ত ফোনের তালিকা"),
+            Cmd("adb shell getprop ro.product.model", "ফোনের মডেল"),
+            Cmd("adb reboot", "রিবুট"),
+            Cmd("adb reboot bootloader", "বুটলোডারে রিবুট"),
+            Cmd("adb reboot recovery", "রিকভারিতে রিবুট"),
+            Cmd("adb push", "ফাইল ফোনে পাঠান (📎 লাগবে)", true),
+            Cmd("adb install", "APK ইনস্টল (📎 লাগবে)", true),
+            Cmd("adb sideload", "OTA zip সাইডলোড (📎 লাগবে)", true),
+            Cmd("adb logcat -d", "লগ দেখুন")
+        )
+        for (c in adbCmds) list.addView(cmdRow(c), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+
+        list.addView(sectionTitle("FASTBOOT  ·  বুটলোডার মোডে"))
+        val fbCmds = listOf(
+            Cmd("fastboot devices", "সংযুক্ত ফোনের তালিকা"),
+            Cmd("fastboot getvar all", "ডিভাইসের সব তথ্য"),
+            Cmd("fastboot reboot", "রিবুট"),
+            Cmd("fastboot reboot bootloader", "বুটলোডারে রিবুট"),
+            Cmd("fastboot flash boot", "boot ফ্ল্যাশ (📎 লাগবে)", true),
+            Cmd("fastboot flash recovery", "recovery ফ্ল্যাশ (📎 লাগবে)", true),
+            Cmd("fastboot flash vbmeta", "vbmeta ফ্ল্যাশ (📎 লাগবে)", true),
+            Cmd("fastboot boot", "ফ্ল্যাশ ছাড়া একবার বুট (📎 লাগবে)", true)
+        )
+        for (c in fbCmds) list.addView(cmdRow(c), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+
+        list.addView(sectionTitle("অন্যান্য"))
+        list.addView(cmdRow(Cmd("help", "সব কমান্ডের তালিকা")), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+
+        cmdPage = ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(list) }
+        frame.addView(cmdPage, android.widget.FrameLayout.LayoutParams(-1, -1))
+
+        // ---------- terminal page ----------
+        termPage = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         out = TextView(this).apply {
             setTextColor(Color.parseColor("#C9D1D9")); textSize = 12.5f; typeface = Typeface.MONOSPACE
             setTextIsSelectable(true)
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
         scroll = ScrollView(this).apply { background = box(Color.parseColor("#010409"), line, 12); addView(out) }
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(8); bottomMargin = dp(8) })
+        termPage.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(8); bottomMargin = dp(8) })
 
-        // input row
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val clip = TextView(this).apply {
             text = "📎"; textSize = 20f; gravity = Gravity.CENTER
@@ -194,9 +232,89 @@ class MainActivity : Activity() {
         row.addView(clip, LinearLayout.LayoutParams(dp(44), dp(44)))
         row.addView(input, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(8); rightMargin = dp(8) })
         row.addView(go, LinearLayout.LayoutParams(dp(44), dp(44)))
-        root.addView(row, LinearLayout.LayoutParams(-1, -2))
+        termPage.addView(row, LinearLayout.LayoutParams(-1, -2))
+        frame.addView(termPage, android.widget.FrameLayout.LayoutParams(-1, -1))
 
+        root.addView(frame, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
+        showTab(false)
+    }
+
+    private fun tabView(label: String, click: () -> Unit): TextView = TextView(this).apply {
+        text = label; textSize = 14f; gravity = Gravity.CENTER; typeface = Typeface.DEFAULT_BOLD
+        setOnClickListener { click() }
+    }
+
+    private fun showTab(terminal: Boolean) {
+        cmdPage.visibility = if (terminal) View.GONE else View.VISIBLE
+        termPage.visibility = if (terminal) View.VISIBLE else View.GONE
+        tabCmd.background = if (terminal) null else box(orange, orange, 10)
+        tabTerm.background = if (terminal) box(orange, orange, 10) else null
+        tabCmd.setTextColor(if (terminal) grey else Color.WHITE)
+        tabTerm.setTextColor(if (terminal) Color.WHITE else grey)
+        if (terminal) scroll.post { scroll.scrollTo(0, out.height) }
+    }
+
+    private fun sectionTitle(t: String): TextView = TextView(this).apply {
+        text = t; setTextColor(orange); textSize = 12f; typeface = Typeface.DEFAULT_BOLD
+        setPadding(dp(4), dp(18), 0, 0)
+    }
+
+    private fun attachRow(): LinearLayout {
+        val r = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = box(card, orange, 14)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            setOnClickListener { pickFile() }
+        }
+        val icon = TextView(this).apply { text = "📎"; textSize = 22f; setPadding(0, 0, dp(12), 0) }
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(TextView(this).apply { text = "ফাইল অ্যাটাচ করুন"; setTextColor(Color.WHITE); textSize = 15f; typeface = Typeface.DEFAULT_BOLD })
+        col.addView(TextView(this).apply { text = "flash / push / install / sideload এর জন্য"; setTextColor(grey); textSize = 12f })
+        r.addView(icon)
+        r.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+        return r
+    }
+
+    private fun cmdRow(c: Cmd): LinearLayout {
+        val r = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = box(card, line, 14)
+            setPadding(dp(14), dp(10), dp(10), dp(10))
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setOnClickListener { fillInput(c) }
+        }
+        col.addView(TextView(this).apply { text = c.cmd; setTextColor(Color.WHITE); textSize = 13.5f; typeface = Typeface.MONOSPACE })
+        col.addView(TextView(this).apply { text = c.desc; setTextColor(grey); textSize = 12f; setPadding(0, dp(2), 0, 0) })
+        val play = TextView(this).apply {
+            text = "▶"; textSize = 16f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(orange) }
+            setOnClickListener { runFromList(c) }
+        }
+        r.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+        r.addView(play, LinearLayout.LayoutParams(dp(42), dp(42)).apply { leftMargin = dp(8) })
+        return r
+    }
+
+    private fun fillInput(c: Cmd) {
+        input.setText(c.cmd + " ")
+        input.setSelection(input.text.length)
+        showTab(true)
+        input.requestFocus()
+    }
+
+    private fun runFromList(c: Cmd) {
+        if (c.needsFile && attach.last == null) {
+            pendingRun = c.cmd
+            pickFile()
+            return
+        }
+        showTab(true)
+        runLine(c.cmd)
     }
 
     private fun pill(label: String, color: Int, click: () -> Unit): TextView = TextView(this).apply {
@@ -288,7 +406,8 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(req: Int, res: Int, data: Intent?) {
         super.onActivityResult(req, res, data)
-        if (req != 77 || res != RESULT_OK || data == null) return
+        if (req != 77) return
+        if (res != RESULT_OK || data == null) { pendingRun = null; return }
         val uris = ArrayList<Uri>()
         val clip = data.clipData
         if (clip != null) {
@@ -316,6 +435,11 @@ class MainActivity : Activity() {
                 } catch (e: Exception) {
                     log.ln("attach failed: ${e.message}", L_E)
                 }
+            }
+            runOnUiThread {
+                val p = pendingRun
+                pendingRun = null
+                if (p != null && attach.last != null) { showTab(true); runLine(p) }
             }
         }
     }
