@@ -11,9 +11,9 @@ You can also open the folder in Android Studio and choose Build > Build APK(s).
 
 ## Use
 - Plug the OTG adapter into this phone and connect the cable to the target phone. The app checks the connection every 2 seconds and tells you what is missing (OTG, USB debugging, authorization).
-- Commands tab: tap the play button to run a command, tap the text to edit it in the terminal first.
-- Attach a file with the paperclip, then run any command marked "needs file".
-- Terminal tab: type any command. Type `help` for the full list.
+- Commands tab: tap the play button to run a command, tap the text to edit it in the terminal first. The banner under the title always shows the command being run (READY / RUNNING / DONE / FAILED), so a remote technician on a screen share can follow along.
+- Attach a file with the + button, then run any command marked "needs file".
+- Terminal tab: type any command. Type `help` for the list.
 
 ## Limits
 - Only the adb and fastboot protocols (no Samsung Odin, Qualcomm EDL or MTK modes).

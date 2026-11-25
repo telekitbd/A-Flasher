@@ -71,7 +71,7 @@ class MainActivity : Activity() {
     private val exec = Executors.newSingleThreadExecutor()
     private val busy = AtomicBoolean(false)
 
-    private val log: Log = { s, lvl -> runOnUiThread { appendOut(s, lvl) } }
+    private val log: Log = { s, lvl -> if (lvl == L_E) runFailed = true; runOnUiThread { appendOut(s, lvl) } }
     private val quiet: Log = { _, _ -> }
 
     private val usbReceiver = object : BroadcastReceiver() {
@@ -248,18 +248,45 @@ class MainActivity : Activity() {
         val danger: Boolean = false
     )
 
+    private lateinit var bannerBox: LinearLayout
+    private lateinit var bannerLabel: TextView
+    private lateinit var bannerCmd: TextView
+    @Volatile private var runFailed = false
+
+    /**
+     * Android 15+ hides "sensitive" views (password-like fields) from screen sharing / video calls.
+     * Mark our views as NOT sensitive so a remote technician can always see the commands.
+     * Uses reflection so the project still compiles with compileSdk 34.
+     */
+    private fun notSensitive(v: View) {
+        if (Build.VERSION.SDK_INT >= 35) {
+            try {
+                // View.CONTENT_SENSITIVITY_NOT_SENSITIVE = 2
+                View::class.java.getMethod("setContentSensitivity", Int::class.javaPrimitiveType).invoke(v, 2)
+            } catch (_: Throwable) {}
+        }
+    }
+
+    private fun showBanner(label: String, color: Int, text: String) {
+        bannerBox.background = box(card, color, 12)
+        bannerLabel.text = label
+        bannerLabel.setTextColor(color)
+        bannerCmd.text = text
+    }
+
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(bg)
-            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setPadding(dp(14), dp(10), dp(14), dp(8))
         }
+        notSensitive(root)
 
         // header
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        titleRow.addView(TextView(this).apply { text = "▌A "; setTextColor(Color.WHITE); textSize = 20f; typeface = Typeface.DEFAULT_BOLD })
+        titleRow.addView(TextView(this).apply { text = "A "; setTextColor(Color.WHITE); textSize = 20f; typeface = Typeface.DEFAULT_BOLD })
         titleRow.addView(TextView(this).apply { text = "Flasher"; setTextColor(orange); textSize = 20f; typeface = Typeface.DEFAULT_BOLD })
         status = TextView(this).apply { text = "● Checking..."; textSize = 12f; setTextColor(grey); typeface = Typeface.MONOSPACE }
         titleCol.addView(titleRow)
@@ -275,16 +302,28 @@ class MainActivity : Activity() {
         header.addView(stopBtn, LinearLayout.LayoutParams(-2, dp(36)))
         root.addView(header, LinearLayout.LayoutParams(-1, -2))
 
+        // live command banner: always on screen, so a screen-share viewer sees what is running
+        bannerBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(9), dp(14), dp(10)) }
+        bannerLabel = TextView(this).apply { textSize = 11f; typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.12f }
+        bannerCmd = TextView(this).apply {
+            setTextColor(Color.WHITE); textSize = 14f; typeface = Typeface.MONOSPACE
+            maxLines = 3; setPadding(0, dp(3), 0, 0)
+        }
+        bannerBox.addView(bannerLabel)
+        bannerBox.addView(bannerCmd)
+        root.addView(bannerBox, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+        showBanner("READY", grey, "No command running")
+
         // tabs
         val tabs = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             background = box(card, line, 14)
             setPadding(dp(4), dp(4), dp(4), dp(4))
         }
-        tabCmd = tabView("☰  Commands") { showTab(false) }
-        tabTerm = tabView(">_  Terminal") { showTab(true) }
-        tabs.addView(tabCmd, LinearLayout.LayoutParams(0, dp(40), 1f))
-        tabs.addView(tabTerm, LinearLayout.LayoutParams(0, dp(40), 1f))
+        tabCmd = tabView("Commands") { showTab(false) }
+        tabTerm = tabView("Terminal") { showTab(true) }
+        tabs.addView(tabCmd, LinearLayout.LayoutParams(0, dp(38), 1f))
+        tabs.addView(tabTerm, LinearLayout.LayoutParams(0, dp(38), 1f))
         root.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
         // attached file bar
@@ -307,7 +346,7 @@ class MainActivity : Activity() {
         val frame = FrameLayout(this)
 
         // ---------- commands page ----------
-        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(16)) }
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(84)) }
 
         connCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12)) }
         connTitle = TextView(this).apply { text = "Checking..."; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(grey) }
@@ -320,73 +359,46 @@ class MainActivity : Activity() {
         connCard.addView(connBtn, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10) })
         list.addView(connCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
 
-        addSection(list, "ESSENTIALS", listOf(
-            Cmd("adb devices", "List connected ADB devices"),
-            Cmd("fastboot devices", "List connected fastboot devices"),
-            Cmd("adb reboot bootloader", "Reboot to bootloader"),
-            Cmd("adb reboot recovery", "Reboot to recovery"),
-            Cmd("fastboot reboot", "Reboot the phone"),
-            Cmd("fastboot reboot bootloader", "Reboot to bootloader again")
+        addSection(list, "DEVICE", listOf(
+            Cmd("adb devices", "List ADB devices"),
+            Cmd("fastboot devices", "List fastboot devices"),
+            Cmd("fastboot getvar all", "Show all bootloader variables"),
+            Cmd("fastboot getvar unlocked", "Is the bootloader unlocked?"),
+            Cmd("fastboot oem device-info", "Bootloader device info")
         ))
 
-        list.addView(attachRow(), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
-
-        addSection(list, "FASTBOOT", listOf(
+        addSection(list, "REBOOT", listOf(
+            Cmd("adb reboot bootloader", "From Android to bootloader"),
+            Cmd("adb reboot recovery", "From Android to recovery"),
+            Cmd("fastboot reboot", "Reboot to system"),
             Cmd("fastboot reboot bootloader", "Reboot to bootloader"),
-            Cmd("fastboot reboot fastboot", "Reboot to fastbootd"),
-            Cmd("fastboot getvar all", "Show bootloader variables"),
-            Cmd("fastboot oem device-info", "Show bootloader device info"),
-            Cmd("fastboot reboot", "Reboot device"),
             Cmd("fastboot reboot recovery", "Reboot to recovery"),
             Cmd("fastboot reboot edl", "Reboot to EDL mode")
         ))
 
-        addSection(list, "FLASH & INSTALL", listOf(
+        list.addView(attachRow(), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
+
+        addSection(list, "FLASH", listOf(
             Cmd("fastboot flash boot", "Flash boot image", needsFile = true),
             Cmd("fastboot flash init_boot", "Flash init_boot image", needsFile = true),
             Cmd("fastboot flash vendor_boot", "Flash vendor_boot image", needsFile = true),
             Cmd("fastboot flash recovery", "Flash recovery image", needsFile = true),
-            Cmd("fastboot flash dtbo", "Flash dtbo image", needsFile = true),
-            Cmd("fastboot flash vbmeta", "Flash vbmeta image", needsFile = true),
-            Cmd("fastboot flash vbmeta --disable-verity --disable-verification", "Flash vbmeta with verity and verification off", needsFile = true),
-            Cmd("fastboot boot", "Boot an image once, without flashing", needsFile = true),
-            Cmd("adb sideload", "Install an OTA / ROM zip in sideload mode", needsFile = true),
-            Cmd("adb install", "Install an APK", needsFile = true),
-            Cmd("adb push", "Copy a file to /sdcard/Download", needsFile = true)
+            Cmd("fastboot flash vbmeta --disable-verity --disable-verification", "Flash vbmeta, verity off", needsFile = true),
+            Cmd("fastboot boot", "Boot an image once (no flash)", needsFile = true),
+            Cmd("adb sideload", "Install OTA / ROM zip", needsFile = true)
         ))
 
-        addSection(list, "DEVICE INFO", listOf(
-            Cmd("adb shell getprop ro.product.model", "Model name"),
-            Cmd("adb shell getprop ro.build.version.release", "Android version"),
-            Cmd("adb shell dumpsys battery", "Battery status"),
-            Cmd("adb shell df -h /data", "Storage usage"),
-            Cmd("adb shell pm list packages -3", "Installed user apps"),
-            Cmd("fastboot getvar all", "All bootloader variables"),
-            Cmd("fastboot getvar current-slot", "Active A/B slot"),
-            Cmd("fastboot getvar unlocked", "Bootloader unlock state"),
-            Cmd("fastboot getvar product", "Product codename")
-        ))
-
-        addSection(list, "TOOLS", listOf(
-            Cmd("adb screenshot", "Save a screenshot to the app folder"),
-            Cmd("adb pull", "Copy a file from the phone", needsArgs = true),
-            Cmd("adb uninstall", "Remove an app by package name", needsArgs = true),
-            Cmd("adb shell", "Run any shell command", needsArgs = true),
-            Cmd("adb logcat -d", "Dump the system log"),
-            Cmd("adb reboot fastboot", "Reboot to fastbootd"),
-            Cmd("fastboot reboot fastboot", "Reboot to fastbootd from fastboot"),
-            Cmd("fastboot set_active", "Switch A/B slot (a or b)", needsArgs = true),
-            Cmd("fastboot oem", "Send an OEM command", needsArgs = true)
-        ))
-
-        addSection(list, "DANGER ZONE", listOf(
+        addSection(list, "BOOTLOADER", listOf(
             Cmd("fastboot flashing unlock", "Unlock bootloader (wipes all data)", danger = true),
             Cmd("fastboot flashing lock", "Lock bootloader (may wipe data)", danger = true),
-            Cmd("fastboot erase userdata", "Erase user data", danger = true),
-            Cmd("fastboot erase cache", "Erase cache", danger = true)
+            Cmd("fastboot erase userdata", "Erase user data", danger = true)
         ))
 
-        addSection(list, "OTHER", listOf(Cmd("help", "Show all commands")))
+        addSection(list, "CUSTOM", listOf(
+            Cmd("fastboot oem", "Send an OEM command", needsArgs = true),
+            Cmd("fastboot flash", "Flash any partition (name + attached file)", needsArgs = true),
+            Cmd("adb shell", "Run a shell command", needsArgs = true)
+        ))
 
         cmdPage = ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(list) }
         frame.addView(cmdPage, FrameLayout.LayoutParams(-1, -1))
@@ -408,20 +420,23 @@ class MainActivity : Activity() {
 
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val clip = TextView(this).apply {
-            text = "📎"; textSize = 20f; gravity = Gravity.CENTER
+            text = "+"; textSize = 24f; gravity = Gravity.CENTER; setTextColor(orange); typeface = Typeface.DEFAULT_BOLD
             background = box(card, line, 22)
             setOnClickListener { pickFile() }
         }
         input = EditText(this).apply {
-            hint = "adb devices / fastboot flash boot ..."
+            hint = "fastboot flash boot ..."
             setHintTextColor(grey); setTextColor(Color.WHITE); typeface = Typeface.MONOSPACE; textSize = 14f
             background = box(card, line, 22)
             setPadding(dp(16), dp(10), dp(16), dp(10))
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-            imeOptions = EditorInfo.IME_ACTION_SEND
+            // NOTE: do NOT use TYPE_TEXT_VARIATION_VISIBLE_PASSWORD here. Android treats it as a password
+            // field and hides it from screen sharing / video calls, so the remote viewer could not see commands.
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            imeOptions = EditorInfo.IME_ACTION_SEND or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
             setSingleLine(true)
             setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_SEND) { submit(); true } else false }
         }
+        notSensitive(input)
         val go = IconButton(this, IconButton.PLAY, orange).apply {
             setOnClickListener { submit() }
         }
@@ -432,8 +447,8 @@ class MainActivity : Activity() {
         frame.addView(termPage, FrameLayout.LayoutParams(-1, -1))
 
         creditFab = IconButton(this, IconButton.INFO, orange).apply { setOnClickListener { showCredits() } }
-        frame.addView(creditFab, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.END or Gravity.BOTTOM).apply {
-            rightMargin = dp(8); bottomMargin = dp(16)
+        frame.addView(creditFab, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.END or Gravity.BOTTOM).apply {
+            rightMargin = dp(4); bottomMargin = dp(14)
         })
 
         root.addView(frame, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -441,54 +456,20 @@ class MainActivity : Activity() {
         showTab(false)
     }
 
-
-    // ---------------- credits ----------------
-    private fun showCredits() {
-        val links = listOf(
-            "Facebook Group" to "https://facebook.com/share/g/1JbRQgSuZz/",
-            "Messenger Group (MAX)" to "https://m.me/j/Abado-eMQJTWGYcV",
-            "Telegram Group" to "https://t.me/+mU6PXP7hXR9hN2M1",
-            "Proof / Verification" to "https://t.me/nayemroot",
-            "YouTube Channel" to "https://youtube.com/@bengleraptor",
-            "TikTok" to "https://tiktok.com/@naimbinharun"
-        )
-        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(16), dp(18), dp(8)) }
-        col.addView(TextView(this).apply { text = "Credits"; setTextColor(orange); textSize = 20f; typeface = Typeface.DEFAULT_BOLD })
-        col.addView(TextView(this).apply {
-            text = "Stay connected with us and get new updates by joining the social media and community groups below."
-            setTextColor(Color.parseColor("#C9D1D9")); textSize = 13.5f; setPadding(0, dp(8), 0, dp(8))
-        })
-        for ((label, url) in links) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                background = box(card, line, 12)
-                setPadding(dp(14), dp(10), dp(14), dp(10))
-                setOnClickListener {
-                    try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-                    catch (e: Exception) { Toast.makeText(this@MainActivity, "Cannot open link", Toast.LENGTH_SHORT).show() }
-                }
-            }
-            row.addView(TextView(this).apply { text = label; setTextColor(Color.WHITE); textSize = 14.5f; typeface = Typeface.DEFAULT_BOLD })
-            row.addView(TextView(this).apply { text = url; setTextColor(Color.parseColor("#79C0FF")); textSize = 12f; typeface = Typeface.MONOSPACE })
-            col.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        }
-        col.addView(TextView(this).apply {
-            text = "Thank you for staying with us. Your support and cooperation mean a lot to us."
-            setTextColor(grey); textSize = 12.5f; setPadding(0, dp(14), 0, dp(4))
-        })
-        val sv = ScrollView(this).apply { background = box(bg, line, 18); addView(col) }
-        val dlg = AlertDialog.Builder(this)
-            .setView(sv)
-            .setPositiveButton("Close", null)
-            .create()
-        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-        dlg.show()
-        dlg.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(orange)
-    }
-
     private fun addSection(list: LinearLayout, title: String, cmds: List<Cmd>) {
         list.addView(sectionTitle(title))
-        for (c in cmds) list.addView(cmdRow(c), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        val group = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = box(card, if (title == "BOOTLOADER") red else line, 14)
+        }
+        cmds.forEachIndexed { i, c ->
+            if (i > 0) {
+                val div = View(this).apply { setBackgroundColor(line) }
+                group.addView(div, LinearLayout.LayoutParams(-1, dp(1)).apply { leftMargin = dp(14); rightMargin = dp(14) })
+            }
+            group.addView(cmdRow(c), LinearLayout.LayoutParams(-1, -2))
+        }
+        list.addView(group, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
     }
 
     private fun tabView(label: String, click: () -> Unit): TextView = TextView(this).apply {
@@ -508,7 +489,8 @@ class MainActivity : Activity() {
     }
 
     private fun sectionTitle(t: String): TextView = TextView(this).apply {
-        text = t; setTextColor(if (t == "DANGER ZONE") red else orange); textSize = 12f; typeface = Typeface.DEFAULT_BOLD
+        text = t; setTextColor(if (t == "BOOTLOADER") red else orange); textSize = 12f; typeface = Typeface.DEFAULT_BOLD
+        letterSpacing = 0.1f
         setPadding(dp(4), dp(18), 0, 0)
     }
 
@@ -520,10 +502,10 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(12), dp(14), dp(12))
             setOnClickListener { pickFile() }
         }
-        val icon = TextView(this).apply { text = "📎"; textSize = 22f; setPadding(0, 0, dp(12), 0) }
+        val icon = TextView(this).apply { text = "+"; textSize = 26f; setTextColor(orange); typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, dp(14), 0) }
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(TextView(this).apply { text = "Attach file"; setTextColor(Color.WHITE); textSize = 15f; typeface = Typeface.DEFAULT_BOLD })
-        col.addView(TextView(this).apply { text = "Pick an image, zip or APK for flash / install / push"; setTextColor(grey); textSize = 12f })
+        col.addView(TextView(this).apply { text = "Pick the image / zip needed by the FLASH commands below"; setTextColor(grey); textSize = 12f })
         r.addView(icon)
         r.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
         return r
@@ -534,21 +516,22 @@ class MainActivity : Activity() {
         val r = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = box(card, if (c.danger) red else line, 14)
-            setPadding(dp(14), dp(10), dp(10), dp(10))
+            setPadding(dp(14), dp(9), dp(10), dp(9))
         }
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setOnClickListener { fillInput(c) }
         }
-        col.addView(TextView(this).apply { text = c.cmd; setTextColor(Color.WHITE); textSize = 13.5f; typeface = Typeface.MONOSPACE })
+        col.addView(TextView(this).apply {
+            text = c.cmd; setTextColor(if (c.danger) red else Color.WHITE); textSize = 13f; typeface = Typeface.MONOSPACE
+        })
         val tag = if (c.needsFile) "  ·  needs file" else if (c.needsArgs) "  ·  needs arguments" else ""
-        col.addView(TextView(this).apply { text = c.desc + tag; setTextColor(grey); textSize = 12f; setPadding(0, dp(2), 0, 0) })
+        col.addView(TextView(this).apply { text = c.desc + tag; setTextColor(grey); textSize = 11.5f; setPadding(0, dp(2), 0, 0) })
         val play = IconButton(this, if (c.needsArgs) IconButton.EDIT else IconButton.PLAY, accent).apply {
             setOnClickListener { runFromList(c) }
         }
         r.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
-        r.addView(play, LinearLayout.LayoutParams(dp(42), dp(42)).apply { leftMargin = dp(8) })
+        r.addView(play, LinearLayout.LayoutParams(dp(38), dp(38)).apply { leftMargin = dp(8) })
         return r
     }
 
@@ -601,6 +584,50 @@ class MainActivity : Activity() {
         }
     }
 
+    // ---------------- credits ----------------
+    private fun showCredits() {
+        val links = listOf(
+            "Facebook Group" to "https://facebook.com/share/g/1JbRQgSuZz/",
+            "Messenger Group (MAX)" to "https://m.me/j/Abado-eMQJTWGYcV",
+            "Telegram Group" to "https://t.me/+mU6PXP7hXR9hN2M1",
+            "Proof / Verification" to "https://t.me/nayemroot",
+            "YouTube Channel" to "https://youtube.com/@bengleraptor",
+            "TikTok" to "https://tiktok.com/@naimbinharun"
+        )
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(16), dp(18), dp(8)) }
+        col.addView(TextView(this).apply { text = "Credits"; setTextColor(orange); textSize = 20f; typeface = Typeface.DEFAULT_BOLD })
+        col.addView(TextView(this).apply {
+            text = "Stay connected with us and get new updates by joining the social media and community groups below."
+            setTextColor(Color.parseColor("#C9D1D9")); textSize = 13.5f; setPadding(0, dp(8), 0, dp(8))
+        })
+        for ((label, url) in links) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = box(card, line, 12)
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                setOnClickListener {
+                    try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                    catch (e: Exception) { Toast.makeText(this@MainActivity, "Cannot open link", Toast.LENGTH_SHORT).show() }
+                }
+            }
+            row.addView(TextView(this).apply { text = label; setTextColor(Color.WHITE); textSize = 14.5f; typeface = Typeface.DEFAULT_BOLD })
+            row.addView(TextView(this).apply { text = url; setTextColor(Color.parseColor("#79C0FF")); textSize = 12f; typeface = Typeface.MONOSPACE })
+            col.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        }
+        col.addView(TextView(this).apply {
+            text = "Thank you for staying with us. Your support and cooperation mean a lot to us."
+            setTextColor(grey); textSize = 12.5f; setPadding(0, dp(14), 0, dp(4))
+        })
+        val sv = ScrollView(this).apply { background = box(bg, line, 18); addView(col) }
+        val dlg = AlertDialog.Builder(this)
+            .setView(sv)
+            .setPositiveButton("Close", null)
+            .create()
+        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dlg.show()
+        dlg.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(orange)
+    }
+
     private fun copyLog() {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("A Flasher log", out.text))
@@ -643,10 +670,12 @@ class MainActivity : Activity() {
     private fun runLine(l: String) {
         if (l == "clear") { out.text = ""; return }
         if (!busy.compareAndSet(false, true)) {
-            log.ln("busy - wait for the running command or press Stop", L_E)
+            runOnUiThread { appendOut("busy - wait for the running command or press Stop\n", L_E) }
             return
         }
+        runFailed = false
         log.ln("$ $l", L_CMD)
+        showBanner("RUNNING", orange, l)
         setRunning(true)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         exec.execute {
@@ -657,6 +686,7 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     setRunning(false)
+                    if (runFailed) showBanner("FAILED", red, l) else showBanner("DONE", green, l)
                 }
             }
         }

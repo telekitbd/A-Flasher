@@ -32,7 +32,7 @@ class Router(
                 "adb" -> adb(t.drop(1))
                 "fastboot" -> fb(t.drop(1))
                 "files" -> {
-                    if (files.map.isEmpty()) log.ln("No attached files. Press the paperclip button.", L_I)
+                    if (files.map.isEmpty()) log.ln("No attached files. Press the + button.", L_I)
                     for ((n, f) in files.map) log.ln("$n  (${humanSize(f.length())})", L_N)
                 }
                 else -> log.ln("Unknown command '${t[0]}'. Type help", L_E)
@@ -50,36 +50,27 @@ class Router(
         log.ln(
             "Commands\n" +
             "  adb devices\n" +
-            "  adb shell <cmd>              e.g. adb shell getprop ro.product.model\n" +
-            "  adb reboot [bootloader|recovery|sideload|fastboot]\n" +
-            "  adb push <file> [remote]     default: /sdcard/Download/\n" +
-            "  adb install <apk>\n" +
+            "  adb reboot [bootloader|recovery]\n" +
             "  adb sideload <ota.zip>\n" +
-            "  adb logcat -d\n" +
-            "  adb screenshot                saved in the app folder\n" +
-            "  adb pull <remote> [name]      saved in the app folder\n" +
-            "  adb uninstall <package>\n" +
+            "  adb shell <cmd>\n" +
             "  fastboot devices\n" +
             "  fastboot getvar <name|all>\n" +
-            "  fastboot reboot [bootloader|recovery|fastboot|edl]\n" +
+            "  fastboot reboot [bootloader|recovery|edl]\n" +
             "  fastboot flash <partition> <file>\n" +
             "  fastboot --disable-verity --disable-verification flash vbmeta <file>\n" +
-            "  (options work before or after the word flash)\n" +
             "  fastboot boot <file>\n" +
             "  fastboot erase <partition>\n" +
             "  fastboot flashing unlock|lock\n" +
             "  fastboot oem <cmd>\n" +
-            "  fastboot set_active a|b\n" +
-            "  fastboot continue\n" +
             "  files   clear   help\n\n" +
-            "Attach a file with the paperclip. Then use its name, @ or just leave the file argument empty.\n" +
+            "Attach a file with the + button. Then use its name, @ or just leave the file argument empty.\n" +
             "Use -s <serial> after adb/fastboot when several phones are connected.", L_I
         )
     }
 
     private fun fileArg(s: String?): File {
         val f = if (s == null) files.last else (files.byName(s) ?: File(s))
-        if (f == null || !f.exists()) throw IOException("No file. Press the paperclip to attach one.")
+        if (f == null || !f.exists()) throw IOException("No file. Press + to attach one.")
         return f
     }
 
