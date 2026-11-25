@@ -15,7 +15,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.7
-      - run: gradle assembleDebug --no-daemon
+      - name: Build debug APK (retry on Maven 429 / network errors)
+        run: |
+          for i in 1 2 3 4; do
+            gradle assembleDebug --no-daemon && exit 0
+            echo "Build attempt $i failed, retrying in $((i*40))s..."
+            sleep $((i*40))
+          done
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: A-Flasher-APK
