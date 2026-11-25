@@ -11,6 +11,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.hardware.usb.UsbManager
 import android.net.Uri
@@ -34,6 +35,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -78,6 +80,7 @@ class MainActivity : Activity() {
         override fun onReceive(c: Context, i: Intent) {
             val msg = if (i.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) "USB device attached" else "USB device detached"
             appendOut(msg + "\n", L_I)
+            requestCheck()
         }
     }
 
@@ -109,12 +112,12 @@ class MainActivity : Activity() {
         appendOut("Connect the target phone with an OTG cable. Type help for commands.\n\n", L_I)
     }
 
-    override fun onResume() { super.onResume(); startMonitor() }
+    override fun onResume() { super.onResume(); resumed = true; requestCheck() }
 
-    override fun onPause() { monitoring = false; super.onPause() }
+    override fun onPause() { resumed = false; super.onPause() }
 
     override fun onDestroy() {
-        monitoring = false
+        resumed = false
         try { unregisterReceiver(usbReceiver) } catch (_: Exception) {}
         router.stop()
         router.abortMonitor()
@@ -124,8 +127,11 @@ class MainActivity : Activity() {
     // ---------------- connection monitor ----------------
     private class ConnState(val color: Int, val title: String, val detail: String, val settings: Boolean)
 
-    @Volatile private var monitoring = false
-    private var gen = 0
+    // Event-driven: a check runs only on app resume, cable attach/detach, or a manual tap.
+    // No periodic polling.
+    @Volatile private var resumed = false
+    private val checking = AtomicBoolean(false)
+    private val recheck = AtomicBoolean(false)
     private val authOk = HashSet<String>()
     private val asked = HashSet<String>()
     private val labels = HashMap<String, String>()
@@ -139,20 +145,24 @@ class MainActivity : Activity() {
         "2. Plug the OTG adapter into this phone, then connect the cable to the target phone.\n" +
         "3. On the target phone: Developer options > USB debugging, and set USB mode to File transfer."
 
-    private fun startMonitor() {
-        if (monitoring) return
-        monitoring = true
-        val my = ++gen
+    private fun requestCheck() {
+        if (!resumed) return
+        if (!checking.compareAndSet(false, true)) { recheck.set(true); return }
         val t = Thread {
-            while (monitoring && gen == my) {
-                val s = try {
-                    computeState()
-                } catch (e: Exception) {
-                    ConnState(orange, "Checking...", e.message ?: "", false)
-                }
-                lastState = s
-                runOnUiThread { showConn(s) }
-                try { Thread.sleep(2000) } catch (_: InterruptedException) {}
+            try {
+                do {
+                    recheck.set(false)
+                    val s = try {
+                        computeState()
+                    } catch (e: Exception) {
+                        ConnState(orange, "Checking...", e.message ?: "", false)
+                    }
+                    lastState = s
+                    runOnUiThread { showConn(s) }
+                } while (recheck.getAndSet(false))
+            } finally {
+                checking.set(false)
+                if (recheck.get()) requestCheck()
             }
         }
         t.isDaemon = true
@@ -356,6 +366,7 @@ class MainActivity : Activity() {
         connBtn = pill("Open Settings", Color.WHITE) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
         connBtn.visibility = View.GONE
         connCard.background = box(card, line, 14)
+        connCard.setOnClickListener { requestCheck() }
         connCard.addView(connTitle)
         connCard.addView(connDetail)
         connCard.addView(connBtn, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10) })
@@ -666,7 +677,7 @@ class MainActivity : Activity() {
         val sv = ScrollView(this).apply { isVerticalScrollBarEnabled = false; background = box(bg, line, 22); addView(col) }
         val d = AlertDialog.Builder(this).setView(sv).create()
         dlg = d
-        d.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        d.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         d.show()
     }
 
@@ -766,7 +777,7 @@ class MainActivity : Activity() {
                 val name = queryName(u) ?: "file.bin"
                 log.ln("Copying '$name'...", L_I)
                 try {
-                    val ins = contentResolver.openInputStream(u) ?: throw java.io.IOException("cannot open file")
+                    val ins = contentResolver.openInputStream(u) ?: throw IOException("cannot open file")
                     val f = ins.use { attach.add(name, it) }
                     log.ln("Attached: $name (${humanSize(f.length())})", L_OK)
                     runOnUiThread {

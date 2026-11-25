@@ -3,6 +3,11 @@ package com.aflasher
 import android.content.Context
 import java.io.File
 import java.io.IOException
+import java.io.RandomAccessFile
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.locks.ReentrantLock
 
 class Router(
     private val ctx: Context,
@@ -11,7 +16,7 @@ class Router(
     private val log: Log
 ) {
     @Volatile private var link: UsbLink? = null
-    val lock = java.util.concurrent.locks.ReentrantLock()
+    val lock = ReentrantLock()
     @Volatile var monLink: UsbLink? = null
 
     @Volatile private var stopped = false
@@ -89,7 +94,7 @@ class Router(
         if ("--disable-verification" in opts) flags = flags or 2
         val tmp = File(ctx.cacheDir, "vbmeta_patched.img")
         src.copyTo(tmp, overwrite = true)
-        java.io.RandomAccessFile(tmp, "rw").use { r ->
+        RandomAccessFile(tmp, "rw").use { r ->
             val magic = ByteArray(4)
             r.seek(0)
             r.readFully(magic)
@@ -171,7 +176,7 @@ class Router(
             "screenshot" -> {
                 val bytes = ad.execBytes("exec:screencap -p")
                 if (bytes.size < 100) throw IOException("screenshot failed")
-                val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+                val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
                 val dest = File(ctx.getExternalFilesDir(null), "screenshots/screen_$stamp.png")
                 dest.parentFile?.mkdirs()
                 dest.writeBytes(bytes)

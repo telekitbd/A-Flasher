@@ -1,7 +1,9 @@
 package com.aflasher
 
 import android.util.Base64
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.math.BigInteger
@@ -193,7 +195,7 @@ class Adb(private val link: UsbLink, private val keyFile: File, private val log:
     fun execBytes(dest: String): ByteArray {
         val s = Stream(dest)
         s.open()
-        val bo = java.io.ByteArrayOutputStream()
+        val bo = ByteArrayOutputStream()
         while (true) {
             val d = s.read() ?: break
             bo.write(d)
@@ -211,7 +213,7 @@ class Adb(private val link: UsbLink, private val keyFile: File, private val log:
         s.write(syncHdr("RECV", pb.size) + pb)
         dest.parentFile?.mkdirs()
         var total = 0L
-        java.io.FileOutputStream(dest).use { fos ->
+        FileOutputStream(dest).use { fos ->
             var acc = ByteArray(0)
             while (true) {
                 while (acc.size < 8) {
