@@ -13,10 +13,13 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.Editable
@@ -80,7 +83,7 @@ class MainActivity : Activity() {
         override fun onReceive(c: Context, i: Intent) {
             val msg = if (i.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) "USB device attached" else "USB device detached"
             appendOut(msg + "\n", L_I)
-            requestCheck()
+            checkAfterUsbEvent()
         }
     }
 
@@ -112,12 +115,19 @@ class MainActivity : Activity() {
         appendOut("Connect the target phone with an OTG cable. Type help for commands.\n\n", L_I)
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        checkAfterUsbEvent()
+    }
+
     override fun onResume() { super.onResume(); resumed = true; requestCheck() }
 
     override fun onPause() { resumed = false; super.onPause() }
 
     override fun onDestroy() {
         resumed = false
+        handler.removeCallbacksAndMessages(null)
         try { unregisterReceiver(usbReceiver) } catch (_: Exception) {}
         router.stop()
         router.abortMonitor()
@@ -145,6 +155,21 @@ class MainActivity : Activity() {
         "2. Plug the OTG adapter into this phone, then connect the cable to the target phone.\n" +
         "3. On the target phone: Developer options > USB debugging, and set USB mode to File transfer."
 
+    // A phone that just rebooted (e.g. adb -> fastboot) re-enumerates in steps: the interfaces and the
+    // permission can become available a moment after the attach event. So after a real USB event we
+    // check right away and once or twice more shortly after. This is event-driven, not a polling loop.
+    private val handler = Handler(Looper.getMainLooper())
+    private val burst = Runnable { requestCheck() }
+    private val burst2 = Runnable { requestCheck() }
+
+    private fun checkAfterUsbEvent() {
+        handler.removeCallbacks(burst)
+        handler.removeCallbacks(burst2)
+        requestCheck()
+        handler.postDelayed(burst, 1200)
+        handler.postDelayed(burst2, 4000)
+    }
+
     private fun requestCheck() {
         if (!resumed) return
         if (!checking.compareAndSet(false, true)) { recheck.set(true); return }
@@ -167,6 +192,19 @@ class MainActivity : Activity() {
         }
         t.isDaemon = true
         t.start()
+    }
+
+    private fun describeUsb(devs: List<UsbDevice>): String {
+        val sb = StringBuilder()
+        for (d in devs) {
+            sb.append(String.format("%04X:%04X  ", d.vendorId, d.productId))
+            for (i in 0 until d.interfaceCount) {
+                val f = d.getInterface(i)
+                sb.append("[${f.interfaceClass}/${f.interfaceSubclass}/${f.interfaceProtocol}] ")
+            }
+            sb.append("\n")
+        }
+        return sb.toString().trim()
     }
 
     private fun computeState(): ConnState {
@@ -231,7 +269,8 @@ class MainActivity : Activity() {
         }
         return ConnState(
             orange, "Device detected, ADB not available",
-            "On the target phone enable Developer options > USB debugging and set USB mode to File transfer, or boot it into fastboot mode.",
+            "On the target phone enable Developer options > USB debugging and set USB mode to File transfer, or boot it into fastboot mode.\n\n" +
+                "USB info (class/subclass/protocol):\n" + describeUsb(all),
             false
         )
     }
