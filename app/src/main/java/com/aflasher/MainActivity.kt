@@ -298,7 +298,9 @@ class MainActivity : Activity() {
             setOnClickListener { stopFlash() }
         }
         setRunning(false)
+        creditFab = IconButton(this, IconButton.INFO, card, orange).apply { setOnClickListener { showCredits() } }
         header.addView(titleCol, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(creditFab, LinearLayout.LayoutParams(dp(36), dp(36)).apply { rightMargin = dp(8) })
         header.addView(stopBtn, LinearLayout.LayoutParams(-2, dp(36)))
         root.addView(header, LinearLayout.LayoutParams(-1, -2))
 
@@ -446,11 +448,6 @@ class MainActivity : Activity() {
         termPage.addView(row, LinearLayout.LayoutParams(-1, -2))
         frame.addView(termPage, FrameLayout.LayoutParams(-1, -1))
 
-        creditFab = IconButton(this, IconButton.INFO, orange).apply { setOnClickListener { showCredits() } }
-        frame.addView(creditFab, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.END or Gravity.BOTTOM).apply {
-            rightMargin = dp(4); bottomMargin = dp(14)
-        })
-
         root.addView(frame, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
         showTab(false)
@@ -480,7 +477,6 @@ class MainActivity : Activity() {
     private fun showTab(terminal: Boolean) {
         cmdPage.visibility = if (terminal) View.GONE else View.VISIBLE
         termPage.visibility = if (terminal) View.VISIBLE else View.GONE
-        creditFab.visibility = if (terminal) View.GONE else View.VISIBLE
         tabCmd.background = if (terminal) null else box(orange, orange, 10)
         tabTerm.background = if (terminal) box(orange, orange, 10) else null
         tabCmd.setTextColor(if (terminal) grey else Color.WHITE)
@@ -586,46 +582,92 @@ class MainActivity : Activity() {
 
     // ---------------- credits ----------------
     private fun showCredits() {
+        class Link(val label: String, val url: String, val letter: String, val color: Int, val sub: String)
         val links = listOf(
-            "Facebook Group" to "https://facebook.com/share/g/1JbRQgSuZz/",
-            "Messenger Group (MAX)" to "https://m.me/j/Abado-eMQJTWGYcV",
-            "Telegram Group" to "https://t.me/+mU6PXP7hXR9hN2M1",
-            "Proof / Verification" to "https://t.me/nayemroot",
-            "YouTube Channel" to "https://youtube.com/@bengleraptor",
-            "TikTok" to "https://tiktok.com/@naimbinharun"
+            Link("Facebook Group", "https://facebook.com/share/g/1JbRQgSuZz/", "f", Color.parseColor("#1877F2"), "facebook.com"),
+            Link("Messenger Group (MAX)", "https://m.me/j/Abado-eMQJTWGYcV", "M", Color.parseColor("#A334FA"), "m.me"),
+            Link("Telegram Group", "https://t.me/+mU6PXP7hXR9hN2M1", "T", Color.parseColor("#2AABEE"), "t.me"),
+            Link("Proof / Verification", "https://t.me/nayemroot", "V", green, "t.me/nayemroot"),
+            Link("YouTube Channel", "https://youtube.com/@bengleraptor", "Y", Color.parseColor("#FF0000"), "youtube.com/@bengleraptor"),
+            Link("TikTok", "https://tiktok.com/@naimbinharun", "t", Color.parseColor("#FE2C55"), "tiktok.com/@naimbinharun")
         )
-        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(16), dp(18), dp(8)) }
-        col.addView(TextView(this).apply { text = "Credits"; setTextColor(orange); textSize = 20f; typeface = Typeface.DEFAULT_BOLD })
+
+        fun badge(letter: String, color: Int, ts: Float): TextView = TextView(this).apply {
+            text = letter; setTextColor(Color.WHITE); textSize = ts; typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER; includeFontPadding = false
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) }
+        }
+
+        var dlg: AlertDialog? = null
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(18), dp(18), dp(16)) }
+
+        // header: logo badge + title
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        head.addView(badge("A", orange, 20f), LinearLayout.LayoutParams(dp(46), dp(46)))
+        val headText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
+        headText.addView(TextView(this).apply { text = "Credits"; setTextColor(Color.WHITE); textSize = 20f; typeface = Typeface.DEFAULT_BOLD })
+        headText.addView(TextView(this).apply { text = "A Flasher  ·  community & support"; setTextColor(grey); textSize = 12f })
+        head.addView(headText, LinearLayout.LayoutParams(0, -2, 1f))
+        col.addView(head)
+
+        col.addView(View(this).apply { background = box(orange, orange, 2) },
+            LinearLayout.LayoutParams(dp(44), dp(3)).apply { topMargin = dp(14) })
+
         col.addView(TextView(this).apply {
             text = "Stay connected with us and get new updates by joining the social media and community groups below."
-            setTextColor(Color.parseColor("#C9D1D9")); textSize = 13.5f; setPadding(0, dp(8), 0, dp(8))
+            setTextColor(Color.parseColor("#C9D1D9")); textSize = 13.5f; setPadding(0, dp(12), 0, dp(4))
         })
-        for ((label, url) in links) {
+
+        for (lk in links) {
             val row = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                background = box(card, line, 12)
-                setPadding(dp(14), dp(10), dp(14), dp(10))
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = box(card, line, 14)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
                 setOnClickListener {
-                    try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                    try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(lk.url))) }
                     catch (e: Exception) { Toast.makeText(this@MainActivity, "Cannot open link", Toast.LENGTH_SHORT).show() }
                 }
+                setOnLongClickListener {
+                    val cm = this@MainActivity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText(lk.label, lk.url))
+                    Toast.makeText(this@MainActivity, "Link copied", Toast.LENGTH_SHORT).show()
+                    true
+                }
             }
-            row.addView(TextView(this).apply { text = label; setTextColor(Color.WHITE); textSize = 14.5f; typeface = Typeface.DEFAULT_BOLD })
-            row.addView(TextView(this).apply { text = url; setTextColor(Color.parseColor("#79C0FF")); textSize = 12f; typeface = Typeface.MONOSPACE })
+            row.addView(badge(lk.letter, lk.color, 17f), LinearLayout.LayoutParams(dp(40), dp(40)))
+            val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, dp(8), 0) }
+            txt.addView(TextView(this).apply { text = lk.label; setTextColor(Color.WHITE); textSize = 14.5f; typeface = Typeface.DEFAULT_BOLD })
+            txt.addView(TextView(this).apply {
+                text = lk.sub; setTextColor(Color.parseColor("#79C0FF")); textSize = 11.5f; typeface = Typeface.MONOSPACE
+                maxLines = 1
+            })
+            row.addView(txt, LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(TextView(this).apply { text = "\u203A"; setTextColor(grey); textSize = 24f; includeFontPadding = false })
             col.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         }
+
         col.addView(TextView(this).apply {
             text = "Thank you for staying with us. Your support and cooperation mean a lot to us."
-            setTextColor(grey); textSize = 12.5f; setPadding(0, dp(14), 0, dp(4))
+            setTextColor(grey); textSize = 12.5f; gravity = Gravity.CENTER; setPadding(dp(6), dp(16), dp(6), 0)
         })
-        val sv = ScrollView(this).apply { background = box(bg, line, 18); addView(col) }
-        val dlg = AlertDialog.Builder(this)
-            .setView(sv)
-            .setPositiveButton("Close", null)
-            .create()
-        dlg.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-        dlg.show()
-        dlg.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(orange)
+        col.addView(TextView(this).apply {
+            text = "Tip: long-press a link to copy it"
+            setTextColor(Color.parseColor("#6E7681")); textSize = 11f; gravity = Gravity.CENTER; setPadding(0, dp(4), 0, 0)
+        })
+
+        col.addView(TextView(this).apply {
+            text = "Close"; setTextColor(Color.WHITE); textSize = 14.5f; typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            background = box(orange, orange, 14)
+            setOnClickListener { dlg?.dismiss() }
+        }, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(14) })
+
+        val sv = ScrollView(this).apply { isVerticalScrollBarEnabled = false; background = box(bg, line, 22); addView(col) }
+        val d = AlertDialog.Builder(this).setView(sv).create()
+        dlg = d
+        d.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        d.show()
     }
 
     private fun copyLog() {
