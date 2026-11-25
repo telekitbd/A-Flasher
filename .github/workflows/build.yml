@@ -8,6 +8,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Remove leftover files from older versions (keep only com.aflasher)
+        run: |
+          J=app/src/main/java
+          find "$J" -mindepth 1 -maxdepth 1 ! -name com -exec rm -rfv {} +
+          find "$J/com" -mindepth 1 -maxdepth 1 ! -name aflasher -exec rm -rfv {} +
+          rm -rfv app/src/main/kotlin app/src/androidTest app/src/test 2>/dev/null || true
+          echo "Remaining packages:"; find "$J" -type d
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
