@@ -557,16 +557,51 @@ class MainActivity : Activity() {
             return
         }
         if (c.danger) {
-            AlertDialog.Builder(this)
-                .setTitle("Are you sure?")
-                .setMessage(c.cmd + "\n\n" + c.desc)
-                .setPositiveButton("Run") { _, _ -> showTab(true); runLine(c.cmd) }
-                .setNegativeButton("Cancel", null)
-                .show()
+            confirmDanger(c) { showTab(true); runLine(c.cmd) }
             return
         }
         showTab(true)
         runLine(c.cmd)
+    }
+
+    /** Themed confirmation popup (matches the app's dark style) for dangerous commands. */
+    private fun confirmDanger(c: Cmd, onRun: () -> Unit) {
+        var dlg: AlertDialog? = null
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(20), dp(20), dp(18)) }
+        col.addView(TextView(this).apply {
+            text = "Are you sure?"; setTextColor(red); textSize = 19f; typeface = Typeface.DEFAULT_BOLD
+        })
+        col.addView(View(this).apply { background = box(red, red, 2) },
+            LinearLayout.LayoutParams(dp(40), dp(3)).apply { topMargin = dp(10) })
+        col.addView(TextView(this).apply {
+            text = c.cmd; setTextColor(Color.WHITE); textSize = 13.5f; typeface = Typeface.MONOSPACE
+            background = box(card, line, 10)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+        col.addView(TextView(this).apply {
+            text = c.desc; setTextColor(Color.parseColor("#C9D1D9")); textSize = 13.5f
+            setPadding(0, dp(12), 0, 0)
+        })
+        val btns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        btns.addView(TextView(this).apply {
+            text = "Cancel"; setTextColor(Color.WHITE); textSize = 14.5f; typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            background = box(card, line, 14)
+            setOnClickListener { dlg?.dismiss() }
+        }, LinearLayout.LayoutParams(0, dp(44), 1f))
+        btns.addView(TextView(this).apply {
+            text = "Run"; setTextColor(Color.WHITE); textSize = 14.5f; typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            background = box(red, red, 14)
+            setOnClickListener { dlg?.dismiss(); onRun() }
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(10) })
+        col.addView(btns, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
+
+        val wrap = FrameLayout(this).apply { background = box(bg, line, 22); addView(col) }
+        val d = AlertDialog.Builder(this).setView(wrap).create()
+        dlg = d
+        d.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        d.show()
     }
 
     private fun pill(label: String, color: Int, click: () -> Unit): TextView = TextView(this).apply {
