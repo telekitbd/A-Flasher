@@ -432,8 +432,7 @@ class MainActivity : Activity() {
         termPage.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(8); bottomMargin = dp(8) })
 
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val clip = TextView(this).apply {
-            text = "+"; textSize = 24f; gravity = Gravity.CENTER; setTextColor(orange); typeface = Typeface.DEFAULT_BOLD
+        val clip = PlusIcon(this, orange).apply {
             background = box(card, line, 22)
             setOnClickListener { pickFile() }
         }
@@ -509,11 +508,11 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(12), dp(14), dp(12))
             setOnClickListener { pickFile() }
         }
-        val icon = TextView(this).apply { text = "+"; textSize = 26f; setTextColor(orange); typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, dp(14), 0) }
+        val icon = PlusIcon(this, orange)
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(TextView(this).apply { text = "Attach file"; setTextColor(Color.WHITE); textSize = 15f; typeface = Typeface.DEFAULT_BOLD })
         col.addView(TextView(this).apply { text = "Pick the image / zip needed by the FLASH commands below"; setTextColor(grey); textSize = 12f })
-        r.addView(icon)
+        r.addView(icon, LinearLayout.LayoutParams(dp(30), dp(30)).apply { rightMargin = dp(14) })
         r.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
         return r
     }

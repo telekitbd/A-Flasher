@@ -57,3 +57,23 @@ class IconButton(ctx: Context, private val kind: Int, private val fill: Int, pri
         }
     }
 }
+
+/** Perfectly centered "+" drawn on a canvas (a text "+" sits low because of font padding). */
+class PlusIcon(ctx: Context, private val color: Int) : View(ctx) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    override fun onDraw(c: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val s = minOf(w, h)
+        val cx = w / 2f
+        val cy = h / 2f
+        p.style = Paint.Style.STROKE
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeWidth = 0.09f * s
+        p.color = color
+        val r = 0.2f * s
+        c.drawLine(cx - r, cy, cx + r, cy, p)
+        c.drawLine(cx, cy - r, cx, cy + r, p)
+    }
+}
